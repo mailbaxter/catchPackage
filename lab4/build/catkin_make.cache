@@ -1,0 +1,2 @@
+ar_track_alvar:lab4_cam
+-DCATKIN_DEVEL_PREFIX=/home/ee106/ros_ws/lab4/devel -DCMAKE_INSTALL_PREFIX=/home/ee106/ros_ws/lab4/install -G Unix Makefiles

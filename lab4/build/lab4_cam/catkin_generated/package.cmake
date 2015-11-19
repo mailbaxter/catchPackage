@@ -1,0 +1,7 @@
+set(_CATKIN_CURRENT_PACKAGE "lab4_cam")
+set(lab4_cam_MAINTAINER "abuchan <abuchan@todo.todo>")
+set(lab4_cam_DEPRECATED "")
+set(lab4_cam_VERSION "0.0.0")
+set(lab4_cam_BUILD_DEPENDS "rospy" "sensor_msgs")
+set(lab4_cam_RUN_DEPENDS "rospy" "sensor_msgs")
+set(lab4_cam_BUILDTOOL_DEPENDS "catkin")
