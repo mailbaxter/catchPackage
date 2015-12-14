@@ -1,0 +1,69 @@
+# Mailman Baxter Project start up code
+#####################
+TODO!!!!!!!!!!!!!!
+Change camera to full resolution
+!!!!!!!!!!!!!!!!!!!!!!11
+!!!!!!!!!!!!!!
+
+
+
+
+
+
+# For each terminal, first run ./baxter.sh in MZP folder and source ~/.bashrc
+./baxter.sh
+source ~/.bashrc
+
+# Then enable the setup
+rosrun baxter_tools enable_robot.py -e
+rosrun baxter_interface joint_trajectory_action_server.py
+roslaunch baxter_moveit_config move_group.launch
+roslaunch ar_track_alvar webcam_track.launch
+# check ar tag position by adding camera and tf
+rviz 
+
+# Run our scripts:
+rosrun project catch_package.py
+rosrun project hand_over.py
+rosrun project pile_up.py
+
+# Useful tips:
+# return the current position of the end effector
+rosrun tf tf_echo base left_gripper
+
+
+#######################
+#Troubleshoot
+###################
+
+# 1. IF anything can't be found (did you run ./baxter.sh?), if, yes, then try the following commands in order
+source /home/mailman/ros_ws/MZP/devel/setup.bash
+source /scratch/shared/baxter_ws/devel/setup.bash --extend
+
+# 2. If camera does not return any image: check if the camera is on
+# Baxter Camera control
+
+# close all cameras
+rosrun baxter_tools camera_control.py -c left_hand_camera
+rosrun baxter_tools camera_control.py -c right_hand_camera
+rosrun baxter_tools camera_control.py -c head_camera
+
+# -o opens the cameras
+# check rviz to see the images & topics that returned
+
+# 3. If moveit! performs poorly, try the following two methods:
+
+#Using Simulated baxter planning to execute on Baxter
+roslaunch baxter_moveit_config demo_baxter.launch
+
+#Modify moveit parameters (increase the number of attempts and the timeout)
+gedit ~/ros_ws/MZP/src/moveit_robots/baxter/baxter_moveit_config/config/kinematics.yaml
+
+#View Camera
+rosrun image_view image_view image:=/cameras/head_camera/image
+
+# 4. If enable robot fail to work
+# After running .baxter.sh, try the following lines:
+unset ROS_HOSTNAME
+export ROS_IP=192.168.2.114
+# If still fail to work, refer to http://sdk.rethinkrobotics.com/wiki/RSDK_Shell#Initialize

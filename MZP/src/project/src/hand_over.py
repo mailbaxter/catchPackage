@@ -12,9 +12,16 @@ from sensor_msgs.msg import Range
 import exp_quat_func as eqf
 import numpy as np
 from scipy import linalg
-# import IR file
+from ar_track_alvar.msg import AlvarMarker, AlvarMarkers
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge, CvBridgeError
+# OpenCV2 for saving an image
+import cv2
 
 listener = None
+
+# Instantiate CvBridge
+bridge = CvBridge()
 
 def quat_to_rbt(pos, rot):
     omega, theta = eqf.quaternion_to_exp(np.array([rot[0], rot[1], rot[2], rot[3]]))
@@ -25,23 +32,103 @@ def callback(message):
     global mail_range
     mail_range = message.range
 
+def image_callback(msg):
+    print("Received an image!")
+    try:
+        # Convert your ROS Image message to OpenCV2
+        cv2_img = bridge.imgmsg_to_cv2(msg, "bgr8")
+    except CvBridgeError, e:
+        print(e)
+    else:
+        # Save your OpenCV2 image as a jpeg 
+        cv2.imwrite('camera_image.png', cv2_img)
 
-def IR_range():
-    range_msg  = rospy.Subscriber('/robot/range/left_hand_range/state',Range, callback)
-  
 
-
-
-
+def callbackAR(message):
+    global ar_name
+    try:
+        ar_name = message.markers[0].id
+    except:
+        a=1
 
 def main():
     rospy.init_node('moveit_node')
     listener = tf.TransformListener()
     #listener.waitForTransform('left_hand_camera', 'base')
 
+    #Initialize moveit_commander
+    moveit_commander.roscpp_initialize(sys.argv)
+
+    #Start a node
+    #rospy.init_node('moveit_node')
+
+    #Initialize both arms
+    robot = moveit_commander.RobotCommander()
+    scene = moveit_commander.PlanningSceneInterface()
+    left_arm = moveit_commander.MoveGroupCommander('left_arm')
+    #right_arm = moveit_commander.MoveGroupCommander('right_arm')
+    left_arm.set_planner_id('RRTConnectkConfigDefault')
+    left_arm.set_planning_time(10)
+    #right_arm.set_planner_id('RRTConnectkConfigDefault')
+    #right_arm.set_planning_time(10)
+
+    #Set up the left gripper
+    left_gripper = baxter_gripper.Gripper('left')
+
+
+    #Original pose ------------------------------------------------------
+
+    original = PoseStamped()
+    original.header.frame_id = "base"
+
+    #the pose the baxter will first turn to
+    original.pose.position.x = 0.210
+    original.pose.position.y = 0.907
+    original.pose.position.z = 0.205
+    
+    original.pose.orientation.x = -0.689
+    original.pose.orientation.y = -0.013
+    original.pose.orientation.z = -0.035
+    original.pose.orientation.w = 0.723
+
+    left_arm.set_pose_target(original)
+
+    #Set the start state for the left arm
+    left_arm.set_start_state_to_current_state()
+
+    left_plan = left_arm.plan()
+
+    raw_input('Press <Enter> to move the left arm to the original pose: ')
+    left_arm.execute(left_plan)
+
+    # First goal pose to pick up ----------------------------------------------
+    goal_1 = PoseStamped()
+    goal_1.header.frame_id = "base"
+
     while not rospy.is_shutdown():
         try:
-            (trans_marker_cam, rot_marker_cam) = listener.lookupTransform('ar_marker_3','left_hand_camera', rospy.Time())
+            rospy.Subscriber('ar_pose_marker',AlvarMarkers, callbackAR)
+            rospy.sleep(1)
+            arTagName = 'ar_marker_' + str(ar_name)
+            print(arTagName)
+            # Set up your subscriber and define its callback
+            image_topic = "/cameras/left_hand_camera/image"
+            my_image_msg = rospy.wait_for_message(image_topic, Image)
+            image_callback(my_image_msg)
+            break
+        except:
+            continue
+    arTagName = 'ar_marker_' + str(ar_name)
+    # Display the image on Baxter's screen
+    display_pub = rospy.Publisher('/robot/xdisplay',Image, latch=True)
+    display_pub.publish(my_image_msg)
+    rospy.sleep(1)
+    #TODO- generate the recognized image and publish it
+    # Check http://sdk.rethinkrobotics.com/wiki/Display_Image_-_Code_Walkthrough
+
+    while not rospy.is_shutdown():
+        try:
+            (trans_marker_cam, rot_marker_cam) = listener.lookupTransform(arTagName,'left_hand_camera', rospy.Time())
             (trans_cam_hand, rot_cam_hand) = listener.lookupTransform('left_hand_camera', 'left_hand', rospy.Time())
             (trans_hand_base, rot_hand_base) = listener.lookupTransform('left_hand', 'base', rospy.Time())
             break
@@ -58,29 +145,6 @@ def main():
     print(g_final)
 
 
-    #Initialize moveit_commander
-    moveit_commander.roscpp_initialize(sys.argv)
-
-    #Start a node
-   # rospy.init_node('moveit_node')
-
-    #Initialize both arms
-    robot = moveit_commander.RobotCommander()
-    scene = moveit_commander.PlanningSceneInterface()
-    left_arm = moveit_commander.MoveGroupCommander('left_arm')
-    right_arm = moveit_commander.MoveGroupCommander('right_arm')
-    left_arm.set_planner_id('RRTConnectkConfigDefault')
-    left_arm.set_planning_time(10)
-    right_arm.set_planner_id('RRTConnectkConfigDefault')
-    right_arm.set_planning_time(10)
-
-    #Set up the left gripper
-    left_gripper = baxter_gripper.Gripper('left')
-
-
-    #First goal pose ------------------------------------------------------
-    goal_1 = PoseStamped()
-    goal_1.header.frame_id = "base"
 
 
     #x, y, and z position
@@ -90,18 +154,18 @@ def main():
 
     print(x_pos)
     print(y_pos)
-    print(float(z_pos)+0.05)
+    print(z_pos)
 
 
     goal_1.pose.position.x = float(x_pos)
-    goal_1.pose.position.y = float(y_pos)
-    goal_1.pose.position.z = float(z_pos) + 0.07
+    goal_1.pose.position.y = float(y_pos) - 0.14
+    goal_1.pose.position.z = float(z_pos)
     
     #Orientation as a quaternion
-    goal_1.pose.orientation.x = 0.0
-    goal_1.pose.orientation.y = -1.0
-    goal_1.pose.orientation.z = 0.0
-    goal_1.pose.orientation.w = 0.0
+    goal_1.pose.orientation.x = -0.689
+    goal_1.pose.orientation.y = -0.013
+    goal_1.pose.orientation.z = -0.035
+    goal_1.pose.orientation.w = 0.723
 
     #Set the goal state to the pose you just defined
     left_arm.set_pose_target(goal_1)
@@ -123,12 +187,12 @@ def main():
 
     #Check using IR to see of the mail is close enough
     incre = 0.01
-    while mail_range > 0.049 and incre < 0.05:
+    while mail_range > 0.06 and incre < 0.05:
         print('Too far from the mail. Trying again...')
         rospy.Subscriber('/robot/range/left_hand_range/state',Range, callback)
         rospy.sleep(1)
         print(mail_range)
-        goal_1.pose.position.z = float(z_pos) + 0.07 - incre
+        goal_1.pose.position.y = float(y_pos) - 0.14 + incre
         incre += 0.01
             #Set the goal state to the pose you just defined
         left_arm.set_pose_target(goal_1)
@@ -139,7 +203,7 @@ def main():
         left_plan = left_arm.plan()
  
         #Execute the plan
-        raw_input('Press <Enter> to move the left arm to goal pose 1 (path constraints are never enforced during this motion): ')
+        raw_input('Press <Enter> to move the left arm to get the mail: ')
         left_arm.execute(left_plan)
     print(mail_range)
     #Close the Gripper
@@ -155,10 +219,22 @@ def main():
     goal_2 = PoseStamped()
     goal_2.header.frame_id = "base"
 
-    #x, y, and z position
-    goal_2.pose.position.x = 0.8
-    goal_2.pose.position.y = 0.5
-    goal_2.pose.position.z = 0.0
+    if ar_name in (1, 3, 12):
+
+        #x, y, and z position
+        goal_2.pose.position.x = 0.7
+        goal_2.pose.position.y = 0.6
+        goal_2.pose.position.z = -0.15
+    elif ar_name in (0,9,15,16):
+        #x, y, and z position
+        goal_2.pose.position.x = 0.7
+        goal_2.pose.position.y = 0.3
+        goal_2.pose.position.z = -0.15
+    else:
+        #x, y, and z position
+        goal_2.pose.position.x = 0.7
+        goal_2.pose.position.y = 0
+        goal_2.pose.position.z = -0.15
     
     #Orientation as a quaternion
     goal_2.pose.orientation.x = 0.0
@@ -172,25 +248,11 @@ def main():
     #Set the start state for the left arm
     left_arm.set_start_state_to_current_state()
 
-    # #Create a path constraint for the arm
-    # #UNCOMMENT TO ENABLE ORIENTATION CONSTRAINTS
-    # orien_const = OrientationConstraint()
-    # orien_const.link_name = "left_gripper";
-    # orien_const.header.frame_id = "base";
-    # orien_const.orientation.y = -1.0;
-    # orien_const.absolute_x_axis_tolerance = 0.1;
-    # orien_const.absolute_y_axis_tolerance = 0.1;
-    # orien_const.absolute_z_axis_tolerance = 0.1;
-    # orien_const.weight = 1.0;
-    # consts = Constraints()
-    # consts.orientation_constraints = [orien_const]
-    # left_arm.set_path_constraints(consts)
-
     #Plan a path
     left_plan = left_arm.plan()
 
     #Execute the plan
-    raw_input('Press <Enter> to move the left arm to goal pose 2: ')
+    raw_input('Press <Enter> to move the left arm to the zipcode region: ')
     left_arm.execute(left_plan)
 
 
